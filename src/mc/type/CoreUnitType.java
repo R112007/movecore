@@ -6,16 +6,21 @@ import arc.graphics.g2d.TextureRegion;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Scaling;
+import mc.blocks.CoreUnitFactory;
+import mc.blocks.CoreUnitFactory.CoreUnitPlan;
 import mc.content.CUnitCommands;
 import mc.gen.Corec;
 import mc.gen.RetractableLegsCoreUnit;
 import mc.meta.CStat;
+import mindustry.Vars;
 import mindustry.content.UnitTypes;
 import mindustry.entities.TargetPriority;
 import mindustry.gen.Unit;
+import mindustry.type.ItemStack;
 import mindustry.type.UnitType;
 import mindustry.type.weapons.MineWeapon;
 import mindustry.ui.Styles;
+import mindustry.world.Block;
 import mindustry.world.blocks.storage.CoreBlock;
 import mindustry.world.meta.Stat;
 import mindustry.world.meta.StatUnit;
@@ -44,6 +49,32 @@ public class CoreUnitType extends UnitType implements CoreUnit {
         unitCapModifier = CoreUnitType.this.unitCapBonus;
       }
     };
+  }
+
+  @Override
+  public ItemStack[] getRequirements(UnitType[] prevReturn, float[] timeReturn) {
+    // 1. 先执行父类原版逻辑（原生UnitFactory/重构器/组装台）
+    ItemStack[] base = super.getRequirements(prevReturn, timeReturn);
+    if (base != null)
+      return base;
+
+    // 2. 遍历全局所有方块，检索自定义CoreUnitFactory
+    for (Block block : Vars.content.blocks()) {
+      if (block instanceof CoreUnitFactory factory) {
+        // 匹配当前单位的plan
+        CoreUnitPlan match = factory.plans.find(p -> p.unit == this);
+        if (match != null) {
+          // 回传生产时长（可选，用于统计）
+          if (timeReturn != null) {
+            timeReturn[0] = match.buildTime;
+          }
+          // 返回当前plan的耗材，作为研究花费计算基数
+          return match.requirements;
+        }
+      }
+    }
+    // 无任何工厂配方时返回空
+    return null;
   }
 
   @Override

@@ -91,26 +91,26 @@ public class CoreUnitFactory extends PayloadBlock {
   public void init() {
     // 单计划转多计划
     if (plans.isEmpty() && unitType != null) {
-      plans.add(new CoreUnitPlan(unitType, unitMax,
+      plans.add(new CoreUnitPlan(unitType, unitMax, buildTime,
           unitRequirements != null ? unitRequirements : ItemStack.empty));
     }
-
+    // 给未设置时长的plan填充全局默认buildTime
     for (var plan : plans) {
       if (plan.requirements == null) {
         plan.requirements = ItemStack.empty;
       }
+      // 未自定义时长则使用工厂全局buildTime
+      if (plan.buildTime <= 0f) {
+        plan.buildTime = this.buildTime;
+      }
     }
-
     initCapacities();
-
-    // 设置动态物品消耗 - 根据当前选择的计划消耗对应物品
     consume(new ConsumeItemDynamic((CoreUnitFactoryBuild e) -> {
       if (e.currentPlan < 0 || e.currentPlan >= plans.size)
         return ItemStack.empty;
       CoreUnitPlan plan = plans.get(e.currentPlan);
       return plan.requirements == null ? ItemStack.empty : plan.requirements;
     }));
-
     super.init();
   }
 
@@ -178,6 +178,8 @@ public class CoreUnitFactory extends PayloadBlock {
             info.add(plan.unit.localizedName).left();
             info.row();
             info.add("Max: " + plan.maxUnits).color(Color.lightGray);
+            info.row();
+            info.add(Strings.autoFixed(plan.buildTime / 60f, 1) + "s").color(Color.lightGray);
             if (ignoreUnitBan) {
               info.row();
               info.add("[accent]Ignore Ban").color(Pal.accent);
@@ -193,7 +195,7 @@ public class CoreUnitFactory extends PayloadBlock {
                 ItemStack stack = plan.requirements[i];
                 if (stack == null || stack.item == null)
                   continue;
-                req.add(StatValues.displayItem(stack.item, stack.amount, buildTime, true)).pad(5);
+                req.add(StatValues.displayItem(stack.item, stack.amount, plan.buildTime, true)).pad(5);
               }
             }).right().grow().pad(10f);
           }
@@ -228,11 +230,17 @@ public class CoreUnitFactory extends PayloadBlock {
     public UnitType unit;
     public ItemStack[] requirements;
     public int maxUnits;
+    public float buildTime;
 
-    public CoreUnitPlan(UnitType unit, int maxUnits, ItemStack... requirements) {
+    public CoreUnitPlan(UnitType unit, int maxUnits, float buildTime, ItemStack... requirements) {
       this.unit = unit;
       this.maxUnits = maxUnits;
+      this.buildTime = buildTime;
       this.requirements = requirements;
+    }
+
+    public CoreUnitPlan(UnitType unit, int maxUnits, ItemStack... requirements) {
+      this(unit, maxUnits, 0f, requirements);
     }
 
     CoreUnitPlan() {
@@ -250,7 +258,10 @@ public class CoreUnitFactory extends PayloadBlock {
     }
 
     public float fraction() {
-      return currentPlan == -1 ? 0f : progress / buildTime;
+      CoreUnitPlan plan = getPlan();
+      if (plan == null)
+        return 0f;
+      return progress / plan.buildTime;
     }
 
     /** 检查是否达到单位上限 */
@@ -319,7 +330,7 @@ public class CoreUnitFactory extends PayloadBlock {
           return;
         }
 
-        if (progress >= buildTime) {
+        if (progress >= plan.buildTime) {
           progress %= 1f;
 
           // 创建单位并包装成Payload
@@ -340,7 +351,7 @@ public class CoreUnitFactory extends PayloadBlock {
       }
 
       // 限制进度不超过buildTime
-      progress = Mathf.clamp(progress, 0f, buildTime);
+      progress = Mathf.clamp(progress, 0f, getPlan().buildTime);
     }
 
     @Override

@@ -48,7 +48,6 @@ ext{
     isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
     sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
 }
-
 dependencies{
     compileOnly mindustryVersion == "be" ? "Anuken:MindustryBuilds:latest" : "Anuken:Mindustry:$mindustryVersion"
 }
@@ -75,33 +74,95 @@ tasks.register('jarAndroid'){
     }
 }
 
-jar{
+jar {
     archiveFileName = "${project.name}Desktop.jar"
 
-    from{
-        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 
-    from(projectDir){
+    from(projectDir) {
         include "mod.hjson"
     }
 
-    from("assets/"){
-        include "**"
+    doLast {
+        def jarFile = archiveFile.get().asFile
+        
+        // 显式列出 assets 下的关键内容，避免 zip 通配符行为不一致
+        // 如果 assets 下还有 sounds/、bundles/、maps/ 等目录，继续往后面加
+        def process = new ProcessBuilder(
+            'zip', '-r', jarFile.absolutePath,
+            'icon.png', 'sprites/'
+            // , 'sounds/', 'bundles/', 'maps/'  // 有的话取消注释
+        )
+            .directory(project.file('assets'))  // 确保是项目根目录下的 assets
+            .inheritIO()
+            .start()
+        
+        process.waitFor()
+        
+        if (process.exitValue() != 0) {
+            throw new GradleException("zip command failed with exit code ${process.exitValue()}")
+        }
+        
+        println "Assets appended to ${jarFile.name}"
     }
 }
 
-tasks.register('deploy', Jar){
+
+tasks.register('deploy') {
     def projectName = project.name
     dependsOn jarAndroid
     dependsOn jar
-    archiveFileName = "${projectName}.jar"
 
-    from{ [zipTree("build/libs/${projectName}Desktop.jar"), zipTree("build/libs/${projectName}Android.jar")] }
+    doLast {
+        def desktopJar = file("build/libs/${projectName}Desktop.jar")
+        def androidJar = file("build/libs/${projectName}Android.jar")
+        def outputJar = file("build/libs/${projectName}.jar")
+        def tempDir = file("build/tmp/deployMerge")
 
-    doLast{
-        delete{
-            delete "build/libs/${projectName}Android.jar"
+        // 先检查输入文件，不存在直接报错
+        if (!desktopJar.exists()) {
+            throw new GradleException("Desktop JAR missing!")
         }
+        if (!androidJar.exists()) {
+            throw new GradleException("Android JAR missing! jarAndroid task failed. Check ANDROID_HOME and d8.")
+        }
+
+        // 清理临时目录
+        if (tempDir.exists()) tempDir.deleteDir()
+        tempDir.mkdirs()
+
+        // 解压 Desktop JAR
+        def p1 = new ProcessBuilder('unzip', '-o', desktopJar.absolutePath, '-d', tempDir.absolutePath)
+            .inheritIO()
+            .start()
+        p1.waitFor()
+        if (p1.exitValue() != 0) throw new GradleException("unzip desktop failed: ${p1.exitValue()}")
+
+        // 解压 Android JAR
+        def p2 = new ProcessBuilder('unzip', '-o', androidJar.absolutePath, '-d', tempDir.absolutePath)
+            .inheritIO()
+            .start()
+        p2.waitFor()
+        if (p2.exitValue() != 0) throw new GradleException("unzip android failed: ${p2.exitValue()}")
+
+        // 成功解压后才删旧文件，避免失败时文件丢失
+        if (outputJar.exists()) outputJar.delete()
+
+        // 打包成最终 JAR
+        def p3 = new ProcessBuilder('zip', '-r', outputJar.absolutePath, '.')
+            .directory(tempDir)
+            .inheritIO()
+            .start()
+        p3.waitFor()
+        if (p3.exitValue() != 0) throw new GradleException("zip failed: ${p3.exitValue()}")
+
+        // 清理
+        tempDir.deleteDir()
+        androidJar.delete()
+
+        println "Deployed to ${outputJar}"
     }
 }
+

@@ -1214,7 +1214,6 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
         if (added)
             return;
         Groups.unit.add(this);
-        Groups.all.add(this);
         Groups.sync.add(this);
         Groups.draw.add(this);
         unit: {

@@ -1,6 +1,7 @@
 package mc;
 
 import arc.Events;
+import mc.blocks.CoreUnderUnloader;
 import mc.blocks.CoreUnitFactory;
 import mc.content.CUnitCommands;
 import mc.core.MoveCoreSystem;
@@ -16,6 +17,7 @@ import mindustry.mod.Mod;
 
 public class Main extends Mod {
   public static Map hereMap = null;
+  boolean ban = false;
 
   @Override
   public void loadContent() {
@@ -25,6 +27,7 @@ public class Main extends Mod {
     MoveCoreSystem.init();
     ClassMap.classes.put("MoveCoreUnitType", CoreUnitType.class);
     ClassMap.classes.put("CoreUnitFactory", CoreUnitFactory.class);
+    ClassMap.classes.put("CoreUnderUnloader", CoreUnderUnloader.class);
   }
 
   @Override
@@ -32,13 +35,14 @@ public class Main extends Mod {
     Events.run(Trigger.update, () -> {
       updateMap();
     });
-    Events.on(MapChangeEvent.class, e -> {
-      for (CoreUnitType core : CoreUnitType.coreTypes) {
-        if (!Vars.state.rules.bannedUnits.contains(core)) {
-          Vars.state.rules.bannedUnits.add(core);
+    if (ban)
+      Events.on(MapChangeEvent.class, e -> {
+        for (CoreUnitType core : CoreUnitType.coreTypes) {
+          if (!Vars.state.rules.bannedUnits.contains(core)) {
+            Vars.state.rules.bannedUnits.add(core);
+          }
         }
-      }
-    });
+      });
   }
 
   public void updateMap() {
