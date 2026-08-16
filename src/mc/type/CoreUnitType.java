@@ -7,6 +7,7 @@ import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Scaling;
 import mc.blocks.CoreUnitFactory;
+import mc.blocks.MCoreBlock;
 import mc.blocks.CoreUnitFactory.CoreUnitPlan;
 import mc.content.CUnitCommands;
 import mc.gen.Corec;
@@ -15,13 +16,14 @@ import mc.meta.CStat;
 import mindustry.Vars;
 import mindustry.content.UnitTypes;
 import mindustry.entities.TargetPriority;
+import mindustry.entities.bullet.BasicBulletType;
 import mindustry.gen.Unit;
 import mindustry.type.ItemStack;
 import mindustry.type.UnitType;
+import mindustry.type.Weapon;
 import mindustry.type.weapons.MineWeapon;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
-import mindustry.world.blocks.storage.CoreBlock;
 import mindustry.world.meta.Stat;
 import mindustry.world.meta.StatUnit;
 import static mindustry.Vars.*;
@@ -30,7 +32,7 @@ public class CoreUnitType extends UnitType implements CoreUnit {
   public int storageCapacity = 3000; // 存储容量
   public float suckRange = 160f, auxiliaryRange = 200f; // 自动吸取范围
   public int unitCapBonus = 10; // 单位容量加成
-  public CoreBlock core;
+  public MCoreBlock core;
   public UnitType unit = UnitTypes.gamma;
   public boolean deployDrawWeapon = true;
   public int deployBlockSize;
@@ -42,7 +44,7 @@ public class CoreUnitType extends UnitType implements CoreUnit {
     super(name);
     useUnitCap = false;
     targetPriority = TargetPriority.core;
-    core = new CoreBlock(this.name + "Core") {
+    core = new MCoreBlock(this.name + "Core") {
       {
         health = (int) CoreUnitType.this.health;
         itemCapacity = CoreUnitType.this.storageCapacity;
@@ -80,12 +82,10 @@ public class CoreUnitType extends UnitType implements CoreUnit {
   @Override
   public void init() {
     coreTypes.add(this);
-    super.init();
     core.health = (int) this.health;
     core.itemCapacity = this.storageCapacity;
     core.unitCapModifier = this.unitCapBonus;
     core.unitType = this.unit;
-    commands.add(CUnitCommands.coreAuxiliaryCommand);
     if (weapons.contains(w -> w instanceof MineWeapon)) {
       drawMineBeam = false;
     }
@@ -100,7 +100,24 @@ public class CoreUnitType extends UnitType implements CoreUnit {
       default:
         throw new RuntimeException(name + "has not entity,please add entity for it");
     }
-
+    super.init();
+    commands.add(CUnitCommands.coreAuxiliaryCommand);
+    /*
+     * weapons.add(new Weapon() {
+     * {
+     * x = y = 0;
+     * top = false;
+     * display = false;
+     * bullet = new BasicBulletType(0, 0) {
+     * {
+     * width = height = 0.01f;
+     * lifetime = 0;
+     * }
+     * };
+     * reload = Float.MAX_VALUE;
+     * }
+     * });
+     */
   }
 
   @Override
@@ -125,7 +142,7 @@ public class CoreUnitType extends UnitType implements CoreUnit {
     });
   }
 
-  public CoreBlock core() {
+  public MCoreBlock core() {
     return core;
   }
 

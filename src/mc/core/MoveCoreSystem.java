@@ -113,6 +113,17 @@ public class MoveCoreSystem {
 
     Events.on(WorldLoadEvent.class, e -> {
       mobileCores.clear();
+      Log.info("[MoveCoreSystem] WorldLoadEvent: reindexing mobile cores...");
+      // 世界加载后 BlockIndexer 会重置，重新注册所有移动核心代理
+      int count = 0;
+      for (mindustry.gen.Unit unit : Groups.unit) {
+        if (unit instanceof Corec core && core.proxy() != null) {
+          CoreInjector.reindexCore(core);
+          mobileCores.get(core.team(), Seq::new).add(core);
+          count++;
+        }
+      }
+      Log.info("[MoveCoreSystem] WorldLoadEvent: reindexed " + count + " mobile cores");
     });
   }
 

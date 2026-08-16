@@ -9,6 +9,7 @@ import mindustry.world.modules.ItemModule;
 import mindustry.entities.abilities.Ability;
 import arc.graphics.g2d.Fill;
 import arc.util.Time;
+import arc.util.Log;
 import mindustry.gen.*;
 import mindustry.gen.Building;
 import mindustry.*;
@@ -37,6 +38,8 @@ import mindustry.async.PhysicsProcess.*;
 import arc.math.geom.Geometry;
 import mindustry.gen.Unitc;
 import mindustry.graphics.*;
+
+import java.lang.reflect.Field;
 import java.nio.*;
 import mindustry.world.blocks.storage.CoreBlock;
 import mindustry.game.EventType.SaveWriteEvent;
@@ -47,6 +50,8 @@ import mindustry.entities.units.WeaponMount;
 import arc.math.geom.Vec2;
 import mindustry.content.*;
 import static mindustry.Vars.*;
+
+import mindustry.ai.Pathfinder;
 import mindustry.ai.UnitCommand;
 import mindustry.world.*;
 import arc.util.pooling.*;
@@ -184,7 +189,6 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
     private transient boolean added;
 
     private transient Bits applied = new Bits(content.getBy(ContentType.status).size);
-
     public boolean autoSwitched = false;
 
     public float auxiliaryRange;
@@ -268,6 +272,7 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
     private transient float y_LAST_;
 
     private transient float y_TARGET_;
+    private static final TileChangeEvent tileChange = new TileChangeEvent();
 
     protected RetractableLegsCoreUnit() {
     }
@@ -280,6 +285,10 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
     @Override
     public <T> T as() {
         return (T) this;
+    }
+
+    public boolean isSyncHidden(Player player) {
+        return !isShooting() && inFogTo(player.team());
     }
 
     @Override
@@ -625,11 +634,6 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
     }
 
     @Override
-    public boolean isSyncHidden(Team team) {
-        return !isShooting() && inFogTo(team);
-    }
-
-    @Override
     public boolean isValid() {
         return !dead && isAdded();
     }
@@ -746,7 +750,6 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
             case health -> health;
             case shield -> shield;
             case maxHealth -> maxHealth;
-            case flying -> isFlying() ? 1.0F : 0.0F;
             case x -> World.conv(x);
             case y -> World.conv(y);
             case velocityX -> vel.x * 60.0F / tilesize;
@@ -1213,6 +1216,7 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
     public void add() {
         if (added)
             return;
+        Groups.all.add(this);
         Groups.unit.add(this);
         Groups.sync.add(this);
         Groups.draw.add(this);
@@ -1228,6 +1232,8 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
                 CoreInjector.injectCore(team().data(), this);
                 Events.fire(new CoreChangeEvent(this.proxy()));
                 Fx.upgradeCore.at(this);
+                // 核心创建/读档后立即刷新敌人寻路目标，否则敌人已创建的 fieldCore 流场可能是空目标
+                refreshEnemyCoreFields(team());
                 Events.on(SaveWriteEvent.class, (e) -> {
                     if (proxy != null && proxy.items != null && !dead()) {
                         savedItems.set(proxy.items);
@@ -1301,6 +1307,7 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
             if (!dead() && !MoveCoreSystem.getCores(team()).contains(this)) {
                 CoreInjector.injectCore(team().data(), this);
                 Events.fire(new CoreChangeEvent(this.proxy()));
+                refreshEnemyCoreFields(team());
             }
             if (proxy != null && proxy.items != null && savedItems != null && savedItems.total() > 0) {
                 proxy.items.set(savedItems);
@@ -1512,6 +1519,10 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
 
     @Override
     public void damage(float amount) {
+        if (player != null && team == player.team() && control != null) {
+            Vars.control.lastDamagedCore = this.proxy;
+            Events.fire(Trigger.teamCoreDamage);
+        }
         rawDamage(Damage.applyArmor(amount, armorOverride >= 0.0F ? armorOverride : armor) / healthMultiplier
                 / Vars.state.rules.unitHealth(team));
     }
@@ -1979,6 +1990,10 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
         hitTime = 1.0F;
         amount -= shieldDamage;
         if (amount > 0 && type.killable) {
+            if (player != null && team == player.team() && control != null) {
+                Vars.control.lastDamagedCore = this.proxy;
+                Events.fire(Trigger.teamCoreDamage);
+            }
             health -= amount;
             if (health <= 0 && !dead) {
                 kill();
@@ -2241,7 +2256,10 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
                 this.items = tmp;
             }
             CoreInjector.removeCore(team().data(), this);
-            Fx.explosion.at(this);
+            // 移动核心死亡后立即刷新敌人寻路目标，避免继续前往旧位置
+            refreshEnemyCoreFields(team());
+            // 死亡特效不要太猛烈
+            Fx.smokePuff.at(this);
         }
         entity: {
             added = false;
@@ -2260,6 +2278,14 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
                 if (mount.sound != null) {
                     mount.sound.stop();
                 }
+            }
+        }
+    }
+
+    public void refreshAirTarget() {
+        for (Unit unit : Groups.unit) {
+            if (unit.isFlying() && unit.mounts.length > 0) {
+
             }
         }
     }
@@ -2416,17 +2442,13 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
             this.drag = type.drag;
             this.armor = type.armor;
             this.hitSize = type.hitSize;
+
             if (mounts().length != type.weapons.size)
                 setupWeapons(type);
-            if (abilities.length != type.abilities.size
-                    || (abilities.length > 0 && abilities[0] instanceof EmptyDataAbility)) {
-                var old = abilities;
+            if (abilities.length != type.abilities.size) {
                 abilities = new Ability[type.abilities.size];
                 for (int i = 0; i < type.abilities.size; i++) {
                     abilities[i] = type.abilities.get(i).copy();
-                    if (i < old.length) {
-                        abilities[i].data = old[i].data;
-                    }
                 }
             }
             if (controller == null)
@@ -2606,8 +2628,27 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
         core: {
             if (proxy != null) {
                 Tile currentTile = Vars.world.tileWorld(x(), y());
-                if (proxy.tile != currentTile) {
+                Tile oldTile = proxy.tile;
+                boolean moved = oldTile != currentTile;
+                if (moved) {
                     proxy.tile = currentTile;
+                    refreshEnemyCoreFields(team());
+                    if (oldTile != null) {
+                        tileChange.set(oldTile);
+                        Events.fire(tileChange);
+                    }
+                    if (currentTile != null) {
+                        tileChange.set(currentTile);
+                        Events.fire(tileChange);
+                    }
+                }
+                // 同步坐标，防止直接访问 Building.x/y 字段的系统拿到旧位置
+                proxy.x = x();
+                proxy.y = y();
+                // 定期补注册，防止 WorldLoadEvent 等清空索引
+                if (timer % 90f < Time.delta) {
+                    refreshEnemyCoreFields(team);
+                    ensureProxyIndexed(team());
                 }
             }
             if (self() instanceof Corec core && core.deployed()) {
@@ -2834,9 +2875,12 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
                 Call.unitEnvDeath(this);
                 team.data().updateCount(type, -1);
             }
+
             for (Ability a : abilities) {
                 a.update(this);
+                // Log.info(a + " " + a.getClass().getName());
             }
+
             if (trail != null) {
                 trail.length = type.trailLength;
                 float scale = type.useEngineElevation ? elevation : 1.0F;
@@ -3117,6 +3161,81 @@ public class RetractableLegsCoreUnit extends Unit implements Corec, RetractableL
             stack.amount = Mathf.clamp(stack.amount, 0, itemCapacity());
             itemTime = Mathf.lerpDelta(itemTime, Mathf.num(hasItem()), 0.05F);
         }
+    }
+
+    private void refreshEnemyCoreFields(Team coreTeam) {
+        if (Vars.pathfinder == null)
+            return;
+
+        try {
+            Field cacheField = Pathfinder.class.getDeclaredField("cache");
+            cacheField.setAccessible(true);
+            Object cacheObj = cacheField.get(Vars.pathfinder);
+            if (!(cacheObj instanceof Pathfinder.Flowfield[][][] cache))
+                return;
+
+            Field dirtyField = Pathfinder.Flowfield.class.getDeclaredField("dirty");
+            dirtyField.setAccessible(true);
+            Field targetsField = Pathfinder.Flowfield.class.getDeclaredField("targets");
+            targetsField.setAccessible(true);
+
+            for (Team enemy : Team.all) {
+                if (enemy == coreTeam || enemy == Team.derelict)
+                    continue;
+
+                Pathfinder.Flowfield[][] enemyCache = cache[enemy.id];
+                if (enemyCache == null)
+                    continue;
+
+                for (int cost = 0; cost < Pathfinder.costTypes.size && cost < enemyCache.length; cost++) {
+                    Pathfinder.Flowfield field = enemyCache[cost][Pathfinder.fieldCore];
+                    if (field == null)
+                        continue;
+
+                    Object targets = targetsField.get(field);
+                    synchronized (targets) {
+                        field.updateTargetPositions();
+                    }
+                    dirtyField.setBoolean(field, true);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void ensureProxyIndexed(Team coreTeam) {
+        if (proxy == null || dead())
+            return;
+        boolean changed = false;
+
+        if (Vars.indexer != null) {
+            Seq<Building> flagged = Vars.indexer.getFlagged(coreTeam, BlockFlag.core);
+            if (flagged != null && !flagged.contains(proxy, true)) {
+                flagged.add(proxy);
+                changed = true;
+            }
+        }
+
+        mindustry.game.Teams.TeamData data = coreTeam.data();
+        if (!data.buildings.contains(proxy, true)) {
+            data.buildings.add(proxy);
+            proxy.indexerBuildIndex = (short) (data.buildings.size - 1);
+            changed = true;
+        }
+        if (data.buildingTree == null) {
+            data.buildingTree = new QuadTree<>(
+                    new arc.math.geom.Rect(0, 0, Vars.world.unitWidth(), Vars.world.unitHeight()));
+        }
+        data.buildingTree.insert(proxy);
+
+        Seq<Building> targetTypes = data.buildingTypes.get(proxy.block, () -> new Seq<>(false));
+        if (!targetTypes.contains(proxy, true)) {
+            targetTypes.add(proxy);
+            proxy.indexerBuildTypeIndex = (short) (targetTypes.size - 1);
+            changed = true;
+        }
+
     }
 
     @Override

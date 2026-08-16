@@ -1,45 +1,74 @@
 package mc.blocks;
 
-import arc.*;
+import arc.Core;
+import arc.Events;
 import arc.audio.Sound;
-import arc.graphics.*;
-import arc.graphics.g2d.*;
-import arc.math.*;
-import arc.scene.ui.layout.*;
-import arc.struct.*;
-import arc.util.*;
-import arc.util.io.*;
+import arc.graphics.Color;
+import arc.graphics.g2d.Draw;
+import arc.graphics.g2d.TextureRegion;
+import arc.math.Mathf;
+import arc.math.geom.Vec2;
+import arc.scene.ui.ButtonGroup;
+import arc.scene.ui.ImageButton;
+import arc.scene.ui.layout.Table;
+import arc.struct.Seq;
+import arc.util.Eachable;
+import arc.util.Nullable;
+import arc.util.Scaling;
+import arc.util.Strings;
+import arc.util.io.Reads;
+import arc.util.io.Writes;
 import mindustry.Vars;
-import mindustry.content.*;
+import mindustry.ai.UnitCommand;
+import mindustry.content.Fx;
 import mindustry.ctype.UnlockableContent;
-import mindustry.entities.*;
+import mindustry.entities.Effect;
 import mindustry.entities.units.BuildPlan;
-import mindustry.game.EventType.*;
+import mindustry.game.EventType.UnitCreateEvent;
 import mindustry.gen.*;
-import mindustry.graphics.*;
-import mindustry.type.*;
-import mindustry.ui.*;
-import mindustry.world.*;
-import mindustry.world.blocks.*;
-import mindustry.world.blocks.payloads.*;
-import mindustry.world.consumers.*;
-import mindustry.world.meta.*;
-import static mindustry.Vars.*;
+import mindustry.graphics.Drawf;
+import mindustry.graphics.Layer;
+import mindustry.graphics.Pal;
+import mindustry.io.TypeIO;
+import mindustry.type.Item;
+import mindustry.type.ItemStack;
+import mindustry.type.UnitType;
+import mindustry.ui.Bar;
+import mindustry.ui.Fonts;
+import mindustry.ui.Styles;
+import mindustry.world.blocks.ItemSelection;
+import mindustry.world.blocks.payloads.PayloadBlock;
+import mindustry.world.blocks.payloads.UnitPayload;
+import mindustry.world.consumers.ConsumeItemDynamic;
+import mindustry.world.meta.Stat;
+import mindustry.world.meta.StatValues;
+
+import static mindustry.Vars.state;
 
 public class CoreUnitFactory extends PayloadBlock {
-  /** 单计划模式：直接指定单位类型 */
+  /**
+   * 单计划模式：直接指定单位类型
+   */
   @Nullable
   public UnitType unitType;
-  /** 单计划模式：物品需求 */
+  /**
+   * 单计划模式：物品需求
+   */
   @Nullable
   public ItemStack[] unitRequirements;
-  /** 单计划模式：最大单位数 */
+  /**
+   * 单计划模式：最大单位数
+   */
   public int unitMax = 1;
 
-  /** 多计划模式 */
+  /**
+   * 多计划模式
+   */
   public Seq<CoreUnitPlan> plans = new Seq<>();
 
-  /** 是否忽略单位被ban的限制 */
+  /**
+   * 是否忽略单位被ban的限制
+   */
   public boolean ignoreUnitBan = true;
 
   public Effect spawnEffect = Fx.spawn;
@@ -58,6 +87,7 @@ public class CoreUnitFactory extends PayloadBlock {
     clearOnDoubleTap = true;
     outputsPayload = true;
     rotate = true;
+    commandable = true;
     ambientSound = Sounds.loopUnitBuilding;
     ambientSoundVolume = 0.09f;
 
@@ -69,6 +99,9 @@ public class CoreUnitFactory extends PayloadBlock {
         return;
       build.currentPlan = i < 0 || i >= plans.size ? -1 : i;
       build.progress = 0f;
+      if (build.command != null && (build.unit() == null || !build.unit().commands.contains(build.command))) {
+        build.command = null;
+      }
     });
 
     config(UnitType.class, (CoreUnitFactoryBuild build, UnitType val) -> {
@@ -79,11 +112,17 @@ public class CoreUnitFactory extends PayloadBlock {
         return;
       build.currentPlan = next;
       build.progress = 0f;
+      if (build.command != null && !val.commands.contains(build.command)) {
+        build.command = null;
+      }
     });
+
+    config(UnitCommand.class, (CoreUnitFactoryBuild build, UnitCommand command) -> build.command = command);
 
     configClear((CoreUnitFactoryBuild build) -> {
       build.currentPlan = -1;
       build.progress = 0f;
+      build.command = null;
     });
   }
 
@@ -126,7 +165,7 @@ public class CoreUnitFactory extends PayloadBlock {
 
     for (int i = 0; i < plans.size; i++) {
       CoreUnitPlan plan = plans.get(i);
-      if (plan.requirements == null || plan.requirements.length == 0)
+      if (plan.requirements == null)
         continue;
 
       for (ItemStack stack : plan.requirements) {
@@ -136,6 +175,8 @@ public class CoreUnitFactory extends PayloadBlock {
         itemCapacity = Math.max(itemCapacity, stack.amount * 2);
       }
     }
+
+    consumeBuilder.each(c -> c.multiplier = b -> state.rules.unitCost(b.team));
   }
 
   @Override
@@ -143,17 +184,20 @@ public class CoreUnitFactory extends PayloadBlock {
     super.setBars();
     addBar("progress", (CoreUnitFactoryBuild e) -> new Bar("bar.progress", Pal.ammo, e::fraction));
 
-    addBar("units", (CoreUnitFactoryBuild e) -> {
-      CoreUnitPlan plan = e.getPlan();
-      return new Bar(
-          () -> plan == null ? "[lightgray]" + Iconc.cancel
+    addBar("units", (CoreUnitFactoryBuild e) -> new Bar(
+        () -> {
+          CoreUnitPlan plan = e.getPlan();
+          return plan == null ? "[lightgray]" + Iconc.cancel
               : Core.bundle.format("bar.unitcap",
                   Fonts.getUnicodeStr(plan.unit.name),
                   e.team.data().countType(plan.unit),
-                  plan.maxUnits),
-          () -> Pal.power,
-          () -> plan == null ? 0f : (float) e.team.data().countType(plan.unit) / plan.maxUnits);
-    });
+                  plan.maxUnits);
+        },
+        () -> Pal.power,
+        () -> {
+          CoreUnitPlan plan = e.getPlan();
+          return plan == null ? 0f : (float) e.team.data().countType(plan.unit) / plan.maxUnits;
+        }));
   }
 
   @Override
@@ -252,9 +296,21 @@ public class CoreUnitFactory extends PayloadBlock {
     public float time;
     public float speedScl;
     public int currentPlan = -1;
+    public @Nullable Vec2 commandPos;
+    public @Nullable UnitCommand command;
 
     public CoreUnitPlan getPlan() {
       return currentPlan < 0 || currentPlan >= plans.size ? null : plans.get(currentPlan);
+    }
+
+    public @Nullable UnitType unit() {
+      return currentPlan == -1 ? null : plans.get(currentPlan).unit;
+    }
+
+    public boolean canSetCommand() {
+      var output = unit();
+      return output != null && output.commands.size > 1 && output.allowChangeCommands &&
+          !(output.commands.size == 2 && output.commands.get(1) == UnitCommand.enterPayloadCommand);
     }
 
     public float fraction() {
@@ -264,7 +320,9 @@ public class CoreUnitFactory extends PayloadBlock {
       return progress / plan.buildTime;
     }
 
-    /** 检查是否达到单位上限 */
+    /**
+     * 检查是否达到单位上限
+     */
     public boolean isAtUnitCap() {
       CoreUnitPlan plan = getPlan();
       if (plan == null)
@@ -272,7 +330,9 @@ public class CoreUnitFactory extends PayloadBlock {
       return team.data().countType(plan.unit) >= plan.maxUnits;
     }
 
-    /** 检查单位是否被ban */
+    /**
+     * 检查单位是否被ban
+     */
     public boolean isUnitBanned() {
       CoreUnitPlan plan = getPlan();
       if (plan == null)
@@ -287,6 +347,24 @@ public class CoreUnitFactory extends PayloadBlock {
       // 自动选择第一个可用计划
       if (currentPlan == -1) {
         currentPlan = plans.indexOf(p -> p != null && p.unit != null && (!p.unit.isBanned() || ignoreUnitBan));
+      }
+    }
+
+    @Override
+    public Vec2 getCommandPosition() {
+      return commandPos;
+    }
+
+    @Override
+    public void onCommand(Vec2 target) {
+      commandPos = target;
+    }
+
+    @Override
+    public void drawSelect() {
+      super.drawSelect();
+      if (plans.size > 1 && currentPlan != -1 && currentPlan < plans.size) {
+        drawItemSelection(plans.get(currentPlan).unit);
       }
     }
 
@@ -338,6 +416,14 @@ public class CoreUnitFactory extends PayloadBlock {
           unit.set(x, y);
           unit.rotation(rotation * 90f);
 
+          if (unit.isCommandable()) {
+            if (commandPos != null) {
+              unit.command().commandPosition(commandPos);
+            }
+            unit.command()
+                .command(command == null && unit.type.defaultCommand != null ? unit.type.defaultCommand : command);
+          }
+
           payload = new UnitPayload(unit);
           payVector.setZero();
 
@@ -349,9 +435,10 @@ public class CoreUnitFactory extends PayloadBlock {
           Events.fire(new UnitCreateEvent(payload.unit, this));
         }
       }
-
-      // 限制进度不超过buildTime
-      progress = Mathf.clamp(progress, 0f, getPlan().buildTime);
+      if (getPlan() != null)
+        progress = Mathf.clamp(progress, 0f, getPlan().buildTime);
+      else
+        progress = 0f;
     }
 
     @Override
@@ -422,6 +509,51 @@ public class CoreUnitFactory extends PayloadBlock {
               }
             },
             selectionRows, selectionColumns);
+
+        table.row();
+
+        Table commands = new Table();
+        commands.top().left();
+
+        Runnable rebuildCommands = () -> {
+          commands.clear();
+          commands.background(null);
+          var unit = unit();
+          if (unit != null && canSetCommand()) {
+            commands.background(Styles.black6);
+            var group = new ButtonGroup<ImageButton>();
+            group.setMinCheckCount(0);
+            int i = 0, columns = Mathf.clamp(units.size, 2, selectionColumns);
+            var list = unit.commands;
+
+            commands.image(Tex.whiteui, Pal.gray).height(4f).growX().colspan(columns).row();
+
+            for (var item : list) {
+              ImageButton button = commands.button(item.getIcon(), Styles.clearNoneTogglei, 40f, () -> {
+                configure(item);
+              }).tooltip(item.localized()).group(group).get();
+
+              button
+                  .update(() -> button.setChecked(command == item || (command == null && unit.defaultCommand == item)));
+
+              if (++i % columns == 0) {
+                commands.row();
+              }
+            }
+
+            if (list.size < columns) {
+              for (int j = 0; j < (columns - list.size); j++) {
+                commands.add().size(40f);
+              }
+            }
+          }
+        };
+
+        rebuildCommands.run();
+
+        table.row();
+        table.add(commands).fillX().left();
+
       } else {
         table.table(Styles.black3, t -> t.add("@none").color(Color.lightGray));
       }
@@ -477,7 +609,7 @@ public class CoreUnitFactory extends PayloadBlock {
 
     @Override
     public byte version() {
-      return 1;
+      return 2;
     }
 
     @Override
@@ -485,6 +617,8 @@ public class CoreUnitFactory extends PayloadBlock {
       super.write(write);
       write.f(progress);
       write.s(currentPlan);
+      TypeIO.writeVecNullable(write, commandPos);
+      TypeIO.writeCommand(write, command);
     }
 
     @Override
@@ -493,6 +627,10 @@ public class CoreUnitFactory extends PayloadBlock {
       if (revision >= 1) {
         progress = read.f();
         currentPlan = read.s();
+      }
+      if (revision >= 2) {
+        commandPos = TypeIO.readVecNullable(read);
+        command = TypeIO.readCommand(read);
       }
     }
   }

@@ -1,8 +1,12 @@
 package mc;
 
 import arc.Events;
+import arc.struct.Seq;
+import arc.util.Log;
+import mc.abilities.AddWeaponAbility;
 import mc.blocks.CoreUnderUnloader;
 import mc.blocks.CoreUnitFactory;
+import mc.blocks.MCoreBlock.MCoreBuild;
 import mc.content.CUnitCommands;
 import mc.core.MoveCoreSystem;
 import mc.game.MEventTypes.MapChangeEvent;
@@ -10,10 +14,16 @@ import mc.gen.EntityRegistry;
 import mc.net.CCall;
 import mc.type.CoreUnitType;
 import mindustry.Vars;
+import mindustry.game.Team;
+import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.Trigger;
+import mindustry.gen.Groups;
+import mindustry.gen.Unit;
 import mindustry.maps.Map;
 import mindustry.mod.ClassMap;
 import mindustry.mod.Mod;
+import mindustry.ui.Styles;
+import mindustry.world.blocks.storage.CoreBlock.CoreBuild;
 
 public class Main extends Mod {
   public static Map hereMap = null;
@@ -21,6 +31,32 @@ public class Main extends Mod {
 
   @Override
   public void loadContent() {
+    if (ban)
+      Events.on(ClientLoadEvent.class, e -> {
+        Vars.ui.hudGroup.fill(null, table -> {
+          table.table(null, t -> {
+            t.button("调试面板", Styles.flatt, () -> {
+              Seq<Unit> allEnemies = new Seq<>();
+              for (Unit u : Groups.unit) {
+                if (u.team() == Vars.state.rules.waveTeam) {
+                  allEnemies.add(u);
+                }
+              }
+              Unit random = allEnemies.random();
+              MCoreBuild b = (MCoreBuild) Vars.state.teams.closestEnemyCore(random.x, random.y,
+                  Vars.state.rules.waveTeam);
+              ;
+              Log.info(
+                  "[core]" + b);
+              Log.info("[X]: " + b.x() + "[Y]: " + b.y());
+            }).size(100, 70);
+
+          }).size(100, 70);
+          table.center().left().update(() -> {
+            table.translation.set(1, 100);
+          });
+        });
+      });
     EntityRegistry.register();
     CCall.load();
     CUnitCommands.load();
@@ -28,6 +64,9 @@ public class Main extends Mod {
     ClassMap.classes.put("MoveCoreUnitType", CoreUnitType.class);
     ClassMap.classes.put("CoreUnitFactory", CoreUnitFactory.class);
     ClassMap.classes.put("CoreUnderUnloader", CoreUnderUnloader.class);
+    ClassMap.classes.put("AddWeaponAbility", AddWeaponAbility.class);
+    // if (ban)
+    T.ioad();
   }
 
   @Override
