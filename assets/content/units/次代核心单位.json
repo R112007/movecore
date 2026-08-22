@@ -1,0 +1,69 @@
+{
+  "template": "MoveCoreUnitType", //类型，不要动
+  "entity": "legs", //实体，不要动
+  "unitCapBonus": 16, //单位上限加成
+  "storageCapacity": 8000, //作为核心的物品容量
+  "suckRange": 100, //挖矿和建造范围
+  "auxiliaryRange": 100, //收取玩家单位物品的范围
+  "unit": "beta", //重生出来的核心机
+  //以下为原版字段
+  "name": "次代核心单位",
+  "alwaysUnlocked": false,
+  "mineSpeed": 2,
+  "mineTier": 3,
+  "buildSpeed": 2,
+  "health": 3500,
+  "speed": 1.2,
+  "rotateSpeed": 0.7,
+  "legCount": 6,
+  "legMoveSpace": 1.0,
+  "legPairOffset": 3,
+  "legLength": 30.0,
+  "legExtension": -15,
+  "legBaseOffset": 10.0,
+  "stepShake": 1.0,
+  "legLengthScl": 0.96,
+  "rippleScale": 2.0,
+  "legSpeed": 0.2,
+  "outlineColor": "#43434FFF",
+  "hitSize": 32,
+  "researchCostMultiplier": 5,
+  "shadowElevation": 0,
+  "research": "初代核心单位"
+    "abilities": [
+		{
+			"type": "AddWeaponAbility",
+	        "per":0.8,//添加武器时的生命值百分比
+	        "weapon":{
+  "x": 0,
+  "y": 0,
+  "rotate": true,
+  "rotateSpeed":100
+  "top": false,
+  "inaccuracy": 8,
+  "reload": 120,
+  "recoil": 0,
+  "mirror": false,
+  "shootCone": 60,
+  "shoot": {
+    "type": "ShootPattern",
+    "shots": 10,
+    "shotDelay": 1
+  },
+  "bullet": {
+    "type": "BasicBulletType",
+    "speed": 3,
+    "damage": 24,
+    "width": 6,
+    "height": 6,
+    "splashDamage": 30,
+    "splashDamageRadius": 18,
+    "hitEffect": "explosion",
+    "despawnEffect": "explosion",
+    "lifetime": 80
+  }
+}
+
+		}
+	],
+}

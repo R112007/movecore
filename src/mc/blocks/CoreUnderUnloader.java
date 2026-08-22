@@ -6,6 +6,7 @@ import arc.scene.ui.layout.Table;
 import arc.util.Time;
 import arc.util.io.Reads;
 import arc.util.io.Writes;
+import mc.gen.RetractableLegsCoreUnit;
 import mindustry.entities.Units;
 import mindustry.gen.Building;
 import mindustry.graphics.Drawf;
@@ -50,8 +51,8 @@ public class CoreUnderUnloader extends Block {
      * 获取覆盖此方块的可移动核心。
      * 范围和核心 nearbyBuilds() 一致：hitSize/2 + tilesize*2
      */
-    public mc.gen.RetractableLegsCoreUnit getCoreUnit() {
-      mc.gen.RetractableLegsCoreUnit[] result = { null };
+    public RetractableLegsCoreUnit getCoreUnit() {
+      RetractableLegsCoreUnit[] result = { null };
       // 核心 nearbyBuilds 的范围是 hitSize/2 + tilesize*2
       // 这里用更大的搜索半径确保找到，然后精确检查
       Units.nearby(x - tilesize * 6, y - tilesize * 6, tilesize * 12, tilesize * 12, u -> {

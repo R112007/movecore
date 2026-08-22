@@ -1,41 +1,66 @@
 {
   "name": "移动核心工厂",
   "type": "CoreUnitFactory",
-  
   "plans": [
     {
-      "unit": "初代核心",
+      "unit": "初代核心单位",
       "requirements": [
-        {"item": "copper", "amount": 1000},
-        {"item": "lead", "amount": 800}
+        {
+          "item": "copper",
+          "amount": 1000
+        },
+        {
+          "item": "lead",
+          "amount": 800
+        }
       ],
-      "maxUnits": 5//最大建造数量
-      "buildTime":1200,
+      "maxUnits": 1 //最大建造数量
+      "buildTime": 1200,
     },
     {
-      "unit": "次代核心",
+      "unit": "次代核心单位",
       "requirements": [
-        {"item": "copper", "amount": 3000},
-        {"item": "lead", "amount": 3000}
-        {"item": "silicon", "amount": 2000}
-      ],
-      "maxUnits": 3
-      "buildTime":2400,
-    },
-    {
-      "unit": "终代核心",
-      "requirements": [
-        {"item": "copper", "amount": 8000},
-        {"item": "lead", "amount": 8000}
-        {"item": "silicon", "amount": 5000},
-        {"item": "thorium", "amount": 4000}
+        {
+          "item": "copper",
+          "amount": 3000
+        },
+        {
+          "item": "lead",
+          "amount": 3000
+        }
+        {
+          "item": "silicon",
+          "amount": 2000
+        }
       ],
       "maxUnits": 1
-       "buildTime":4800,
+      "buildTime": 2400,
+    },
+    {
+      "unit": "终代核心单位",
+      "requirements": [
+        {
+          "item": "copper",
+          "amount": 8000
+        },
+        {
+          "item": "lead",
+          "amount": 8000
+        }
+        {
+          "item": "silicon",
+          "amount": 5000
+        },
+        {
+          "item": "thorium",
+          "amount": 4000
+        }
+      ],
+      "maxUnits": 1,
+      "buildTime": 4800,
     }
   ],
-  "ignoreUnitBan": true,//这个别动
-  
+  "ignoreUnitBan": true, //这个别动
   "size": 4,
   "health": 1200,
   "hasPower": true,
@@ -45,17 +70,17 @@
   "rotate": true,
   "configurable": true,
   "outputsPayload": true,
-  "alwaysUnlocked":false,
+  "alwaysUnlocked": false,
   "consumes": {
-    "power": 5.0
+    "power": 5.0,
   },
-      "requirements":[
-    "copper/250"
-    "lead/130"
-    "titanium/175"
-    "thorium/125"
+  "requirements": [
+    "copper/250",
+    "lead/130",
+    "titanium/175",
+    "thorium/125",
     "silicon/275"
-    ],
+  ],
   "category": "units",
   "research": "core-shard",
   "buildVisibility": "shown"

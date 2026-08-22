@@ -11,6 +11,7 @@ import mc.blocks.MCoreBlock;
 import mc.blocks.CoreUnitFactory.CoreUnitPlan;
 import mc.content.CUnitCommands;
 import mc.gen.Corec;
+import mc.gen.MechCoreUnit;
 import mc.gen.RetractableLegsCoreUnit;
 import mc.meta.CStat;
 import mindustry.Vars;
@@ -96,12 +97,15 @@ public class CoreUnitType extends UnitType implements CoreUnit {
       case "legs":
         this.constructor = RetractableLegsCoreUnit::create;
         break;
+      case "mech":
+        this.constructor = MechCoreUnit::create;
+        break;
 
       default:
         throw new RuntimeException(name + "has not entity,please add entity for it");
     }
     super.init();
-    commands.add(CUnitCommands.coreAuxiliaryCommand);
+    commands.add(CUnitCommands.coreAuxiliaryCommand, CUnitCommands.flee);
     /*
      * weapons.add(new Weapon() {
      * {

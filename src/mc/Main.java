@@ -3,6 +3,8 @@ package mc;
 import arc.Events;
 import arc.struct.Seq;
 import arc.util.Log;
+import arc.util.Time;
+import ent.anno.Annotations.EntityDef;
 import mc.abilities.AddWeaponAbility;
 import mc.blocks.CoreUnderUnloader;
 import mc.blocks.CoreUnitFactory;
@@ -10,7 +12,9 @@ import mc.blocks.MCoreBlock.MCoreBuild;
 import mc.content.CUnitCommands;
 import mc.core.MoveCoreSystem;
 import mc.game.MEventTypes.MapChangeEvent;
+import mc.gen.Corec;
 import mc.gen.EntityRegistry;
+import mc.gen.RetractableLegsc;
 import mc.net.CCall;
 import mc.type.CoreUnitType;
 import mindustry.Vars;
@@ -18,7 +22,9 @@ import mindustry.game.Team;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Groups;
+import mindustry.gen.Mechc;
 import mindustry.gen.Unit;
+import mindustry.gen.Unitc;
 import mindustry.maps.Map;
 import mindustry.mod.ClassMap;
 import mindustry.mod.Mod;
@@ -26,8 +32,12 @@ import mindustry.ui.Styles;
 import mindustry.world.blocks.storage.CoreBlock.CoreBuild;
 
 public class Main extends Mod {
+  public static @EntityDef({ Unitc.class, Corec.class, RetractableLegsc.class }) CoreUnitType core1;
+  public static @EntityDef({ Unitc.class, Corec.class, Mechc.class }) CoreUnitType core2;
+
   public static Map hereMap = null;
   boolean ban = false;
+  public static float timer = 0f;
 
   @Override
   public void loadContent() {
@@ -65,14 +75,13 @@ public class Main extends Mod {
     ClassMap.classes.put("CoreUnitFactory", CoreUnitFactory.class);
     ClassMap.classes.put("CoreUnderUnloader", CoreUnderUnloader.class);
     ClassMap.classes.put("AddWeaponAbility", AddWeaponAbility.class);
-    // if (ban)
-    T.ioad();
   }
 
   @Override
   public void init() {
     Events.run(Trigger.update, () -> {
       updateMap();
+      timer += Time.delta;
     });
     if (ban)
       Events.on(MapChangeEvent.class, e -> {
