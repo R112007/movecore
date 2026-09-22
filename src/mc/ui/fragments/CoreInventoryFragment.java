@@ -4,6 +4,9 @@ import arc.Core;
 import arc.Events;
 import arc.func.Boolp;
 import arc.func.Prov;
+import arc.graphics.Color;
+import arc.graphics.g2d.Draw;
+import arc.graphics.g2d.Lines;
 import arc.graphics.g2d.TextureRegion;
 import arc.input.KeyCode;
 import arc.math.Interp;
@@ -19,6 +22,7 @@ import arc.scene.event.Touchable;
 import arc.scene.ui.Button;
 import arc.scene.ui.Image;
 import arc.scene.ui.ScrollPane;
+import arc.scene.ui.layout.Scl;
 import arc.scene.ui.layout.Stack;
 import arc.scene.ui.layout.Table;
 import arc.struct.IntSet;
@@ -26,6 +30,7 @@ import arc.util.Align;
 import arc.util.Time;
 import mc.gen.Corec;
 import mindustry.core.UI;
+import mindustry.graphics.Pal;
 import mindustry.game.EventType.WorldLoadEvent;
 import mindustry.gen.Tex;
 import mindustry.type.Item;
@@ -38,7 +43,23 @@ public class CoreInventoryFragment {
   private static final float holdWithdraw = 20f;
   private static final float holdShrink = 120f;
   private static final float followSpeed = 0.15f;
-  private final Table table = new Table();
+
+  /** 面板轮廓颜色，可随时修改 */
+  public static Color outlineColor = Color.valueOf("#454545");
+  /** 面板轮廓线宽度（会随 UI 缩放等比调整），设为 0 可关闭轮廓 */
+  public static float outlineStroke = 2.5f;
+  private final Table table = new Table() {
+    @Override
+    public void draw() {
+      super.draw();
+      if (!visible || getChildren().isEmpty() || outlineStroke <= 0.01f || outlineColor.a <= 0.001f)
+        return;
+      float s = outlineStroke * Scl.scl(1f);
+      Lines.stroke(s, outlineColor);
+      Lines.rect(x + s / 2f, y + s / 2f, width - s, height - s);
+      Draw.reset();
+    }
+  };
   private Corec core;
   private float holdTime = 0f, emptyTime;
   private boolean holding, held;

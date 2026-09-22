@@ -10,6 +10,9 @@ import mc.blocks.CoreUnderUnloader;
 import mc.blocks.CoreUnitFactory;
 import mc.blocks.MCoreBlock.MCoreBuild;
 import mc.content.CUnitCommands;
+import mc.content.MBlocks;
+import mc.content.MUnits;
+import mc.content.Tech;
 import mc.core.MoveCoreSystem;
 import mc.game.MEventTypes.MapChangeEvent;
 import mc.gen.Corec;
@@ -41,6 +44,9 @@ public class Main extends Mod {
 
   @Override
   public void loadContent() {
+    MUnits.load();
+    MBlocks.load();
+    Tech.load();
     if (ban)
       Events.on(ClientLoadEvent.class, e -> {
         Vars.ui.hudGroup.fill(null, table -> {

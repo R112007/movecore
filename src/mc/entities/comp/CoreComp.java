@@ -119,6 +119,7 @@ public abstract class CoreComp implements Unitc, Corec, Posc, MindustryXc {
   public float fleeStuckTimer = 0f;
   public transient Vec2 fleeTarget = new Vec2();
   public Corec corec = self();
+  public boolean enableFlee = true; // ← 新增
 
   @Override
   public void setType(UnitType type) {
@@ -127,6 +128,7 @@ public abstract class CoreComp implements Unitc, Corec, Posc, MindustryXc {
       this.suckRange = c.suckRange();
       this.unitCapBonus = c.unitCapBonus();
       this.auxiliaryRange = c.auxiliaryRange();
+      this.enableFlee = c.enableFlee(); // ← 新增
     } else
       throw new IllegalArgumentException("CoreUnit must use CoreUnitType");
   }
@@ -357,9 +359,6 @@ public abstract class CoreComp implements Unitc, Corec, Posc, MindustryXc {
     }
     if (timer % 60 == 0) {
       updateClosestCore();
-    }
-    if (corec.elevation() > 0 && onSolid() == false) {
-      corec.elevation(0.0F);
     }
     if (deployed) {
       Seq<Building> builds = nearbyBuilds();
@@ -699,63 +698,72 @@ public abstract class CoreComp implements Unitc, Corec, Posc, MindustryXc {
   }
 
   public void updateAutoCommand() {
-    // === 步骤1：威胁检测 ===
-    Unit nearestThreat = Units.closestEnemy(team, x(), y(), fleeDetectRange,
-        u -> u.isValid() && u.targetable(team));
+    // === 逃跑逻辑（受 enableFlee 控制）===
+    if (enableFlee) {
+      // === 步骤1：威胁检测 ===
+      Unit nearestThreat = Units.closestEnemy(team, x(), y(), fleeDetectRange,
+          u -> u.isValid() && u.targetable(team));
 
-    float threatDst = nearestThreat != null ? Mathf.dst(x(), y(), nearestThreat.x, nearestThreat.y) : Float.MAX_VALUE;
-    boolean inDanger = nearestThreat != null && threatDst < fleeSafeRange;
+      float threatDst = nearestThreat != null ? Mathf.dst(x(), y(), nearestThreat.x, nearestThreat.y) : Float.MAX_VALUE;
+      boolean inDanger = nearestThreat != null && threatDst < fleeSafeRange;
 
-    // === 步骤2：逃离模式 ===
-    if (inDanger) {
-      // 到达当前目标后才重新选点（或首次无目标）
-      boolean needNewTarget = fleeTarget.x == 0 && fleeTarget.y == 0
-          || Mathf.dst(x(), y(), fleeTarget.x, fleeTarget.y) < tilesize * 1f;
+      // === 步骤2：逃离模式 ===
+      if (inDanger) {
+        boolean needNewTarget = fleeTarget.x == 0 && fleeTarget.y == 0
+            || Mathf.dst(x(), y(), fleeTarget.x, fleeTarget.y) < tilesize * 1f;
 
-      // 定期重选：防止敌人移动导致旧目标不再合理
-      if (!needNewTarget && fleeing && fleeRetargetTimer <= 0) {
-        needNewTarget = true;
-      }
+        if (!needNewTarget && fleeing && fleeRetargetTimer <= 0) {
+          needNewTarget = true;
+        }
 
-      // 卡死检测：正在逃跑但长时间没向目标移动
-      if (!needNewTarget && fleeing) {
-        if (vel().len() < type.speed * 0.1f) {
-          fleeStuckTimer += Time.delta;
-          if (fleeStuckTimer > 45f) {
-            needNewTarget = true;
+        if (!needNewTarget && fleeing) {
+          if (vel().len() < type.speed * 0.1f) {
+            fleeStuckTimer += Time.delta;
+            if (fleeStuckTimer > 45f) {
+              needNewTarget = true;
+              fleeStuckTimer = 0f;
+            }
+          } else {
             fleeStuckTimer = 0f;
           }
-        } else {
+        }
+
+        if (needNewTarget) {
+          Vec2 target = FleePathfinder.inst.findFleeTarget(
+              self(), team, fleeDetectRange, fleeSafeRange, fleeSamples);
+          if (target != null) {
+            fleeTarget.set(target);
+          }
+          fleeRetargetTimer = 60f;
           fleeStuckTimer = 0f;
         }
+        fleeRetargetTimer -= Time.delta;
+
+        if (controller() instanceof CommandAI ai) {
+          if (ai.command != UnitCommand.moveCommand) {
+            ai.command = UnitCommand.moveCommand;
+          }
+          ai.targetPos = null;
+        }
+
+        fleeing = true;
+        idleTimer = 0f;
+        return;
       }
 
-      if (needNewTarget) {
-        Vec2 target = FleePathfinder.inst.findFleeTarget(
-            self(), team, fleeDetectRange, fleeSafeRange, fleeSamples);
-        if (target != null) {
-          fleeTarget.set(target);
-        }
-        fleeRetargetTimer = 60f;
+      // === 步骤3：退出逃离模式 ===
+      if (fleeing) {
+        fleeing = false;
+        fleeTarget.set(0, 0);
+        fleeRetargetTimer = 0f;
         fleeStuckTimer = 0f;
-      }
-      fleeRetargetTimer -= Time.delta;
-
-      // 逃跑时由 CoreComp 直接控制移动，不依赖 CommandAI 的 moveCommand
-      if (controller() instanceof CommandAI ai) {
-        if (ai.command != UnitCommand.moveCommand) {
+        if (controller() instanceof CommandAI ai) {
           ai.command = UnitCommand.moveCommand;
+          ai.targetPos = null;
         }
-        ai.targetPos = null;
       }
-
-      fleeing = true;
-      idleTimer = 0f;
-      return;
-    }
-
-    // === 步骤3：退出逃离模式 ===
-    if (fleeing) {
+    } else if (fleeing) {
+      // 禁用逃跑时，清理逃跑状态
       fleeing = false;
       fleeTarget.set(0, 0);
       fleeRetargetTimer = 0f;
@@ -794,4 +802,3 @@ public abstract class CoreComp implements Unitc, Corec, Posc, MindustryXc {
     return Math.abs(Angles.angleDist(rotation(), targetAngle)) <= 4f;
   }
 }
-

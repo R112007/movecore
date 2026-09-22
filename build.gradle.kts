@@ -161,8 +161,8 @@ allprojects{
             encoding = "UTF-8"
         }
 
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
+        sourceCompatibility = "21"
+        targetCompatibility = "21"
     }
 }
 
@@ -242,7 +242,7 @@ project(":"){
             // 显式列出 assets 下的关键内容，避免 zip 通配符行为不一致
             // 如果 assets 下还有 sounds/、maps/ 等目录，继续往后面加
             val process = ProcessBuilder(
-                "zip", "-r", jarFile.absolutePath,
+                "zip", "-r", "-UN=UTF8", jarFile.absolutePath,
                 "icon.png", "sprites/", "content/", "bundles/"
                 // , "sounds/", "maps/"  // 有的话取消注释
             )

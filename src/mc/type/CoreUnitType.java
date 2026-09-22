@@ -8,6 +8,8 @@ import arc.util.Log;
 import arc.util.Scaling;
 import mc.blocks.CoreUnitFactory;
 import mc.blocks.MCoreBlock;
+import mc.blocks.ModularUnitAssembler;
+import mc.blocks.MoveUpgradeFactory;
 import mc.blocks.CoreUnitFactory.CoreUnitPlan;
 import mc.content.CUnitCommands;
 import mc.gen.Corec;
@@ -19,6 +21,7 @@ import mindustry.content.UnitTypes;
 import mindustry.entities.TargetPriority;
 import mindustry.entities.bullet.BasicBulletType;
 import mindustry.gen.Unit;
+import mindustry.type.ItemSeq;
 import mindustry.type.ItemStack;
 import mindustry.type.UnitType;
 import mindustry.type.Weapon;
@@ -40,6 +43,8 @@ public class CoreUnitType extends UnitType implements CoreUnit {
   public TextureRegion rightTopBase, rightUnderBase, leftTopBase, leftUnderBase;
   public String entity;
   public static Seq<CoreUnitType> coreTypes = new Seq<>();
+  public boolean useStringEntity = true;
+  public boolean enableFlee = false; // ← 新增：是否启用逃跑逻辑
 
   public CoreUnitType(String name) {
     super(name);
@@ -52,6 +57,11 @@ public class CoreUnitType extends UnitType implements CoreUnit {
         unitCapModifier = CoreUnitType.this.unitCapBonus;
       }
     };
+  }
+
+  @Override
+  public boolean enableFlee() {
+    return enableFlee;
   }
 
   @Override
@@ -74,7 +84,48 @@ public class CoreUnitType extends UnitType implements CoreUnit {
           // 返回当前plan的耗材，作为研究花费计算基数
           return match.requirements;
         }
+      } else if (block instanceof ModularUnitAssembler) {
+        var assembler = (ModularUnitAssembler) content.blocks()
+            .find(u -> u instanceof ModularUnitAssembler a && a.plans.contains(p -> p.unit == this));
+        if (assembler != null) {
+          var plan = assembler.plans.find(p -> p.unit == this);
+
+          if (timeReturn != null) {
+            timeReturn[0] = plan.time;
+          }
+          ItemSeq reqs = new ItemSeq();
+          for (var bstack : plan.requirements) {
+            if (bstack.item instanceof Block block1) {
+              for (var stack : block1.requirements) {
+                reqs.add(stack.item, stack.amount * bstack.amount);
+              }
+            } else if (bstack.item instanceof UnitType unit) {
+              for (var stack : unit.getTotalRequirements()) {
+                reqs.add(stack.item, stack.amount * bstack.amount);
+              }
+            }
+          }
+          return reqs.toArray();
+        }
+      } else if (block instanceof MoveUpgradeFactory) {
+        var factory = (MoveUpgradeFactory) block;
+        for (int j = 0; j < factory.upgrades.size; j++) {
+          MoveUpgradeFactory.Upgrade up = factory.upgrades.get(j);
+          if (up.out == this) {
+            if (timeReturn != null) {
+              timeReturn[0] = up.constructTime;
+            }
+            ItemSeq reqs = new ItemSeq();
+            if (up.items != null) {
+              for (ItemStack stack : up.items) {
+                reqs.add(stack.item, stack.amount);
+              }
+            }
+            return reqs.toArray();
+          }
+        }
       }
+
     }
     // 无任何工厂配方时返回空
     return null;
@@ -93,17 +144,18 @@ public class CoreUnitType extends UnitType implements CoreUnit {
     if (allowedInPayloads) {
       allowedInPayloads = false;
     }
-    switch (entity) {
-      case "legs":
-        this.constructor = RetractableLegsCoreUnit::create;
-        break;
-      case "mech":
-        this.constructor = MechCoreUnit::create;
-        break;
+    if (useStringEntity)
+      switch (entity) {
+        case "legs":
+          this.constructor = RetractableLegsCoreUnit::create;
+          break;
+        case "mech":
+          this.constructor = MechCoreUnit::create;
+          break;
 
-      default:
-        throw new RuntimeException(name + "has not entity,please add entity for it");
-    }
+        default:
+          throw new RuntimeException(name + "has not entity,please add entity for it");
+      }
     super.init();
     commands.add(CUnitCommands.coreAuxiliaryCommand, CUnitCommands.flee);
     /*

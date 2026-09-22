@@ -13,4 +13,5 @@ public interface CoreUnit {
 
   CoreBlock core();
 
+  boolean enableFlee(); // ← 新增
 }
